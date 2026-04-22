@@ -45,7 +45,7 @@ def extract_attributes(df):
 
 
 # ─────────────────────────────────────────────
-# KENNEITH + TIFFANY - PRICE RANGE ANALYSIS (FL + CA)
+# KENNEITH — PRICE RANGE ANALYSIS (FL + CA)
 # ─────────────────────────────────────────────
 
 def clean_price_range(df):
@@ -102,14 +102,14 @@ def run_linear_regression(df):
         preds = model.predict(X)
         r2 = r2_score(y, preds)
 
-        print(f"\n{state} Linear Regression - Price vs Stars")
+        print(f"\n{state} Linear Regression — Price vs Stars")
         print(f"  Coefficient: {model.coef_[0]:.4f}")
         print(f"  Intercept:   {model.intercept_:.4f}")
         print(f"  R² Score:    {r2:.4f}")
 
 
 # ─────────────────────────────────────────────
-# KENNEITH + TIFFANY - HOURS OF OPERATION ANALYSIS (FL + CA)
+# KENNEITH — HOURS OF OPERATION ANALYSIS (FL + CA)
 # ─────────────────────────────────────────────
 
 def parse_hours(hours_dict):
@@ -142,10 +142,40 @@ def parse_hours(hours_dict):
     return total_hours / count if count > 0 else None
 
 
+def parse_total_hours(hours_dict):
+    """Calculate total weekly hours open by summing across all days."""
+    if not isinstance(hours_dict, dict):
+        return None
+
+    total_hours = 0
+    count = 0
+
+    for day, hours in hours_dict.items():
+        try:
+            open_str, close_str = hours.split("-")
+
+            open_h, open_m = map(int, open_str.split(":"))
+            close_h, close_m = map(int, close_str.split(":"))
+
+            open_time = open_h + open_m / 60
+            close_time = close_h + close_m / 60
+
+            if close_time < open_time:
+                close_time += 24
+
+            total_hours += close_time - open_time
+            count += 1
+        except:
+            continue
+
+    return total_hours if count > 0 else None
+
+
 def clean_hours(df):
     """Drop rows with missing avg_daily_hours and bin into Short/Medium/Long."""
     df = df.copy()
-    df["avg_daily_hours"] = df["hours"].apply(parse_hours)
+    df["avg_daily_hours"]    = df["hours"].apply(parse_hours)
+    df["total_weekly_hours"] = df["hours"].apply(parse_total_hours)
     df = df.dropna(subset=["avg_daily_hours"])
 
     bins = [0, 8, 12, 24]
@@ -187,6 +217,29 @@ def plot_hours_vs_stars(hours_avg, save_path="stars_vs_hours.png"):
     print(f"Saved to {save_path}")
 
 
+def plot_weekly_hours_distribution(df, save_path="weekly_hours_distribution.png"):
+    """Side-by-side histograms of total weekly hours open for FL and CA."""
+    fl_hours = df[df["state"] == "FL"]["total_weekly_hours"].dropna()
+    ca_hours = df[df["state"] == "CA"]["total_weekly_hours"].dropna()
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+
+    ax1.hist(fl_hours, bins=20, color="#FF6B6B", edgecolor="black")
+    ax1.set_title("FL Total Weekly Hours Distribution")
+    ax1.set_xlabel("Total Weekly Hours Open")
+    ax1.set_ylabel("Number of Restaurants")
+
+    ax2.hist(ca_hours, bins=20, color="#4ECDC4", edgecolor="black")
+    ax2.set_title("CA Total Weekly Hours Distribution")
+    ax2.set_xlabel("Total Weekly Hours Open")
+
+    plt.suptitle("Total Weekly Hours Open: FL vs CA", fontsize=13)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.show()
+    print(f"Saved to {save_path}")
+
+
 def run_hours_regression(df):
     """Run linear regression (avg_daily_hours -> stars) for each state and print results."""
     for state in ["FL", "CA"]:
@@ -200,14 +253,66 @@ def run_hours_regression(df):
         preds = model.predict(X)
         r2 = r2_score(y, preds)
 
-        print(f"\n{state} Linear Regression - Hours vs Stars")
+        print(f"\n{state} Linear Regression — Hours vs Stars")
         print(f"  Coefficient: {model.coef_[0]:.4f}")
         print(f"  Intercept:   {model.intercept_:.4f}")
         print(f"  R² Score:    {r2:.4f}")
 
 
+def calc_total_weekly_hours(hours_dict):
+    """Sum total hours open across all days in a week."""
+    if not isinstance(hours_dict, dict):
+        return None
+
+    total = 0
+    for day, hours in hours_dict.items():
+        try:
+            open_str, close_str = hours.split("-")
+
+            open_h, open_m = map(int, open_str.split(":"))
+            close_h, close_m = map(int, close_str.split(":"))
+
+            open_time = open_h + open_m / 60
+            close_time = close_h + close_m / 60
+
+            if close_time < open_time:
+                close_time += 24
+
+            total += close_time - open_time
+        except:
+            continue
+
+    return total if total > 0 else None
+
+
+def plot_weekly_hours_distribution(df, save_path="weekly_hours_distribution.png"):
+    """Side-by-side histograms of total weekly hours open for FL vs CA."""
+    df = df.copy()
+    df["total_weekly_hours"] = df["hours"].apply(calc_total_weekly_hours)
+
+    fl_hours = df[df["state"] == "FL"]["total_weekly_hours"].dropna()
+    ca_hours = df[df["state"] == "CA"]["total_weekly_hours"].dropna()
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+
+    axes[0].hist(fl_hours, bins=20, color="#FF6B6B", edgecolor="black")
+    axes[0].set_title("FL Total Weekly Hours Distribution")
+    axes[0].set_xlabel("Total Weekly Hours Open")
+    axes[0].set_ylabel("Number of Restaurants")
+
+    axes[1].hist(ca_hours, bins=20, color="#4ECDC4", edgecolor="black")
+    axes[1].set_title("CA Total Weekly Hours Distribution")
+    axes[1].set_xlabel("Total Weekly Hours Open")
+
+    plt.suptitle("Total Weekly Hours Open: FL vs CA", fontsize=13)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.show()
+    print(f"Saved to {save_path}")
+
+
 # ─────────────────────────────────────────────
-#      DISTRIBUTION + CORRELATION PLOTS
+# KENNEITH — DISTRIBUTION + CORRELATION PLOTS
 # ─────────────────────────────────────────────
 
 def plot_star_distribution(df, save_path="star_distribution.png"):
@@ -252,14 +357,17 @@ def plot_correlation_bars(df, save_path="correlation_bars_fl_ca.png"):
 
 
 # ─────────────────────────────────────────────
-# EILEEN - PARKING + NOISE ANALYSIS (CA ONLY)
+# EILEEN — PARKING + NOISE ANALYSIS (CA ONLY)
 # ─────────────────────────────────────────────
 
 def clean_noise(noise):
     """Clean the noise level value by removing extra characters and normalizing case."""
     if noise is None:
         return None
-    return str(noise).replace("u'", "").replace("'", "").strip().lower()
+    cleaned = str(noise).replace("u'", "").replace("'", "").strip().lower()
+    if cleaned in ("none", "nan", ""):
+        return None
+    return cleaned
 
 
 def parse_parking(parking):
@@ -299,7 +407,7 @@ def number_features(df_ca):
 
 def plot_stars_vs_parking(df_ca, save_path="stars_vs_parking_CA.png"):
     """Bar chart of average star rating by parking availability (CA only)."""
-    df_parking = df_ca[df_ca["has_parking"].notna()].copy()
+    df_parking = df_ca[df_ca["has_parking"].notna() & (df_ca["has_parking"] != "None") & (df_ca["has_parking"] != "")].copy()
     parking_avg = df_parking.groupby("has_parking")["stars"].mean().reset_index()
 
     plt.figure(figsize=(6, 4))
@@ -316,8 +424,8 @@ def plot_stars_vs_parking(df_ca, save_path="stars_vs_parking_CA.png"):
 
 def plot_stars_vs_noise(df_ca, save_path="stars_vs_noise_CA.png"):
     """Bar chart of average star rating by noise level (CA only)."""
-    df_noise = df_ca[df_ca["noise_level"].notna()].copy()
-    noise_avg = df_noise.groupby("noise_level")["stars"].mean().reset_index()
+    df_noise = df_ca[df_ca["noise_level"].notna() & (df_ca["noise_level"] != "None") & (df_ca["noise_level"] != "")].copy()
+    noise_avg = df_noise.groupby("noise_level", dropna=True)["stars"].mean().reset_index()
 
     plt.figure(figsize=(7, 4))
     plt.bar(noise_avg["noise_level"], noise_avg["stars"], color="#4ECDC4")
@@ -343,7 +451,7 @@ def parking_linear_regression(df_ca):
     preds = model.predict(X)
     r2 = r2_score(y, preds)
 
-    print("\nCA Linear Regression - Parking vs Stars")
+    print("\nCA Linear Regression — Parking vs Stars")
     print(f"  Coefficient: {model.coef_[0]:.4f}")
     print(f"  Intercept:   {model.intercept_:.4f}")
     print(f"  R² Score:    {r2:.4f}")
@@ -363,7 +471,7 @@ def noise_linear_regression(df_ca):
     preds = model.predict(X)
     r2 = r2_score(y, preds)
 
-    print("\nCA Linear Regression - Noise Level vs Stars")
+    print("\nCA Linear Regression — Noise Level vs Stars")
     print(f"  Coefficient: {model.coef_[0]:.4f}")
     print(f"  Intercept:   {model.intercept_:.4f}")
     print(f"  R² Score:    {r2:.4f}")
@@ -394,12 +502,12 @@ def plot_correlation_bars_ca(df_ca, save_path="correlation_bars_CA.png"):
 
 
 # ─────────────────────────────────────────────
-# KHAI - PARKING + NOISE ANALYSIS (FL ONLY)
+# KHAI — PARKING + NOISE ANALYSIS (FL ONLY)
 # ─────────────────────────────────────────────
 
 def plot_stars_vs_parking_fl(df_fl, save_path="stars_vs_parking_FL.png"):
     """Bar chart of average star rating by parking availability (FL only)."""
-    df_parking = df_fl[df_fl["has_parking"].notna()].copy()
+    df_parking = df_fl[df_fl["has_parking"].notna() & (df_fl["has_parking"] != "None") & (df_fl["has_parking"] != "")].copy()
     parking_avg = df_parking.groupby("has_parking")["stars"].mean().reset_index()
 
     plt.figure(figsize=(6, 4))
@@ -416,8 +524,8 @@ def plot_stars_vs_parking_fl(df_fl, save_path="stars_vs_parking_FL.png"):
 
 def plot_stars_vs_noise_fl(df_fl, save_path="stars_vs_noise_FL.png"):
     """Bar chart of average star rating by noise level (FL only)."""
-    df_noise = df_fl[df_fl["noise_level"].notna()].copy()
-    noise_avg = df_noise.groupby("noise_level")["stars"].mean().reset_index()
+    df_noise = df_fl[df_fl["noise_level"].notna() & (df_fl["noise_level"] != "None") & (df_fl["noise_level"] != "")].copy()
+    noise_avg = df_noise.groupby("noise_level", dropna=True)["stars"].mean().reset_index()
 
     plt.figure(figsize=(7, 4))
     plt.bar(noise_avg["noise_level"], noise_avg["stars"], color="#FF6B6B")
@@ -443,7 +551,7 @@ def parking_linear_regression_fl(df_fl):
     preds = model.predict(X)
     r2 = r2_score(y, preds)
 
-    print("\nFL Linear Regression - Parking vs Stars")
+    print("\nFL Linear Regression — Parking vs Stars")
     print(f"  Coefficient: {model.coef_[0]:.4f}")
     print(f"  Intercept:   {model.intercept_:.4f}")
     print(f"  R² Score:    {r2:.4f}")
@@ -463,7 +571,7 @@ def noise_linear_regression_fl(df_fl):
     preds = model.predict(X)
     r2 = r2_score(y, preds)
 
-    print("\nFL Linear Regression - Noise Level vs Stars")
+    print("\nFL Linear Regression — Noise Level vs Stars")
     print(f"  Coefficient: {model.coef_[0]:.4f}")
     print(f"  Intercept:   {model.intercept_:.4f}")
     print(f"  R² Score:    {r2:.4f}")
@@ -537,6 +645,9 @@ def main():
     print("\nPlotting hours vs stars...")
     plot_hours_vs_stars(hours_avg)
 
+    print("\nPlotting weekly hours distribution...")
+    plot_weekly_hours_distribution(df_hours)
+
     print("\nRunning hours linear regression...")
     run_hours_regression(df_hours)
     # Longer hours correlates with lower ratings in both states.
@@ -591,4 +702,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
