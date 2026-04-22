@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 
+# CHANGE FILE PATH! CODE WILL NOT WORK IF THE DATABASE FP DOES NOT MATCH
 DATA_PATH = r"C:\VS projects\ds2500 final project\Yelp JSON\yelp_academic_dataset_business.json"
 
 
